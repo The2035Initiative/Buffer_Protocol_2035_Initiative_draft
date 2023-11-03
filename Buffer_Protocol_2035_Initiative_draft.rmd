@@ -1,0 +1,112 @@
+---
+title: "Buffer_Protocol_Rough_Draft"
+author: "Sofia Ingersoll"
+format: html
+editor: visual
+---
+
+*Rough Draft pls no judging yet*
+
+# Protocol for Creating Buffer Zones & Selecting Random Addresses in Buffer Regions
+
+The following code describes a step-by-step process for creating a map containing buffer zones around points of interest. In this documentation, the data utilized is the [US Wind Data](https://dataverse.harvard.edu/file.xhtml?fileId=7339850&version=1.0), this data is associated with the "Replication Data for: Prevalence and predictors of wind energy opposition in North America", <https://doi.org/10.7910/DVN/LE2V0R>, Harvard Dataverse, V1, 2023. The collaborators on that project include: Stokes, Leah; Franzblau, Emma; Lovering, Jessica R.; Miljanich, Chris.
+
+\~ include more about what the data is about and the outcomes of making visualization \~
+
+### Loading Libraries
+
+```{r}
+library(tidyverse)        # essential r package 
+library(tmap)             # package aids in the creation of buffer zones
+library(sf)               # package simplifies spatial dataframes
+                          # by providing 'sticky geometry'
+library(smoothr)          # aesthetic and visual aid for buffers created
+library(sf)
+library(spData)
+library(ggplot2)
+library(raster)
+```
+
+### Read in the Data
+
+```{r}
+wind_data <- read.csv("data/wind_data_usa.csv")     # reading in & storing data
+```
+
+#### Confirm the Data Loaded Properly
+
+```{r}
+head(wind_data)                  # displays the first 6 rows of the data
+                                 # along with all of the columns 
+```
+
+## Wrangling & Subsetting
+
+*want:*
+
+*- a scalelable map of USA*
+
+*- the name of the plants as points*
+
+*- adjustable buffer zones (donuts) around the plants*
+
+*- ability to randomly select addresses within the buffer*
+
+*- filter for specific groups of interest*
+
+### **Need to convert lat/long into raster data or geometry column**
+
+**Below is pseudocode**
+
+```{r}
+rasterFromXYZ(wind_data, crs = "4326")
+```
+
+```{r}
+coordinates(wind_data.sp) <- c('longitude', 'latitude')
+
+```
+
+### **Need to set CRS: likely EPSG:4326**
+
+```{r}
+st_transform(wind_data, crs = '4326')
+```
+
+### Subset of plant names 
+
+I have a strong inclination that I won't need this using tmaps, but just in case for now.
+
+```{r}
+
+```
+
+## Initial Visualization of the Data
+
+**More psuedocode**
+
+```{r}
+tmap_mode('view')
+
+tm_shape(wind_data, coords =  c("longitude", "latitude")) +
+  tm_polygons() +
+  tm_symbols('plant_name')
+```
+
+```{r}
+
+mapview(wind_data, xcol = "longitude", ycol = "latitude", crs = 4269, grid = FALSE)
+```
+
+## Buffers
+
+Buffers create polygons representing a set distance from a feature.
+
+**Below is psuedocode for now until the cleaning is configured right**
+
+```{r include=TRUE}
+wind_data_buffer <- st_buffer(wind_data, dist = 5000)
+
+tm_shape(wind_data_buffer) +
+  tm_polygons()
+```
