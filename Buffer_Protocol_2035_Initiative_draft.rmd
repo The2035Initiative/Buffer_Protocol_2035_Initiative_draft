@@ -15,22 +15,26 @@ The following code describes a step-by-step process for creating a map containin
 
 ### Loading Libraries
 
+The following libraries were selected based on their functionality and ability to optimize our data for mapping.
+
 ```{r}
 library(tidyverse)        # essential r package 
-library(tmap)             # package aids in the creation of buffer zones
 library(sf)               # package simplifies spatial dataframes
                           # by providing 'sticky geometry'
 library(smoothr)          # aesthetic and visual aid for buffers created
-library(sf)
-library(spData)
-library(ggplot2)
-library(raster)
+library(usmap)            # provides the data for us base map
+library(tmap)             # package aids in the creation of buffer zones
 ```
 
 ### Read in the Data
 
+To simplify the following step, it is important to organize your folders in a way that makes sense for your workflow. In many cases, the data sets we work with are typically too large to be uploaded to GitHub. As a result, a very common practice is storing your data in a folder, directly outside of your repository in a folder labeled "data".
+
+The code chunk below for `read.csv` demonstrates how to exit your current location using `..` and enter the desired folder location using `/`. It is important that your file path does not contain any spaces and is directly reflective of the file path for the data you wish to read in.
+
 ```{r}
-wind_data <- read.csv("data/wind_data_usa.csv")     # reading in & storing data
+wind_data <- read.csv("../data/wind_data/wind_data_usa.csv")  
+# reading in & storing data
 ```
 
 #### Confirm the Data Loaded Properly
@@ -44,7 +48,7 @@ head(wind_data)                  # displays the first 6 rows of the data
 
 *want:*
 
-*- a scalelable map of USA*
+*- a scaleable map of USA w/ state boundaries*
 
 *- the name of the plants as points*
 
@@ -54,48 +58,97 @@ head(wind_data)                  # displays the first 6 rows of the data
 
 *- filter for specific groups of interest*
 
-### **Need to convert lat/long into raster data or geometry column**
+### **Converting lat/long into Raster Data (i.e. sticky geometries)**
 
-**Below is pseudocode**
-
-```{r}
-rasterFromXYZ(wind_data, crs = "4326")
-```
+Below we will use the package `sf` to convert the lat/long data into a raster geometry column. In this single line, we will also be assigning the CRS EPSG:4326 to the sf data frame. The CRS was selected because it provides a relatively proportionate display of the United States. We are open to suggestions regarding our CRS if a different project better fits our data.
 
 ```{r}
-coordinates(wind_data.sp) <- c('longitude', 'latitude')
-
+wind_sf <- wind_data %>%             # calls desired dataset
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+                                     # creates geometry column with desired crs 
 ```
 
-### **Need to set CRS: likely EPSG:4326**
+#### **Confirm CRS is correct**
 
 ```{r}
-st_transform(wind_data, crs = '4326')
+crs(wind_sf)                         # output should reveal WGS84, EPSG:4326
 ```
 
-### Subset of plant names 
+#### Subsetting Wind Plant Locations in US
 
-I have a strong inclination that I won't need this using tmaps, but just in case for now.
+\*\* double check written description here \*\*
+
+The code below selects only coordinates that intersect with the wind data and us mapping information
 
 ```{r}
-
+wind_sf <- wind_sf[us,]                      # creates a combined subset of the                                                   wind data and the us}
 ```
+
+#### Creating a Grid of Equal Area Polygons for Plant Plotting
+
+\*\* idea not necessarily necessary \*\*
 
 ## Initial Visualization of the Data
 
-**More psuedocode**
+**ggplot psuedocode**
+
+### Creating a Base Map Layer
+
+Using the world dataset provided in the sf package, we will filter out the United States
+
+*First attempt is not the best method because it does not include the states & their borders*
+
+```{r}
+us <- world %>%                              # calls sf dataset
+  filter(name_long == "United States") %>%   # filters for states in the US
+  st_transform(us, crs = "EPSG:4326")        # converts the CRS to match wind_sf
+
+us_map <- ggplot(us) +
+  geom_sf(color = 'black')
+
+us_map
+```
+
+*Second attempt is missing Alaska and Hawaii but has borders*
+
+```{r}
+usa <- st_as_sf(maps::map('state', fill = TRUE, plot = FALSE))
+
+ggplot(usa) +
+  geom_sf(color = 'black',
+          fill = 'white',
+          size = 0.125) +
+  coord_sf(crs = st_crs(4326))
+```
+
+*Third Attempt*
+
+```{r}
+str(us_map())
+
+us_states_for_mapping <- us_map(
+  regions = "states")
+
+ggplot(us_states_for_mapping) +
+  geom_sf(color = "black")
+```
+
+### Final Base Map of US
+
+-   Need to include state lines for greater understanding and accuracy for collecting addresses
+
+```{r}
+
+```
+
+**tmap psuedocode**
 
 ```{r}
 tmap_mode('view')
 
-tm_shape(wind_data, coords =  c("longitude", "latitude")) +
+tm_shape(wind_sf) +
   tm_polygons() +
   tm_symbols('plant_name')
-```
-
-```{r}
-
-mapview(wind_data, xcol = "longitude", ycol = "latitude", crs = 4269, grid = FALSE)
 ```
 
 ## Buffers
