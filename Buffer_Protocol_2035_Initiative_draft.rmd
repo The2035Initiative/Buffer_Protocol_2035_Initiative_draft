@@ -13,22 +13,26 @@ The following code describes a step-by-step process for creating a map containin
 
 \~ include more about what the data is about and the outcomes of making visualization \~
 
+Analysis of these areas will provide insight into local resistance and spatially distorted signalling in relation to wind power infrastructure and climate policy.
+
 ### Loading Libraries
 
 The following libraries were selected based on their functionality and ability to optimize our data for mapping.
 
 ```{r}
+# Loading Libraries
 library(tidyverse)        # essential r package 
 library(sf)               # package simplifies spatial dataframes
-                          # by providing 'sticky geometry'
+library(raster)
+library(tmap)
+library(terra)
+library(stars)
 library(smoothr)          # aesthetic and visual aid for buffers created
-library(usmap)            # provides the data for us base map
-library(tmap)             # package aids in the creation of buffer zones
 ```
 
 ### Read in the Data
 
-To simplify the following step, it is important to organize your folders in a way that makes sense for your workflow. In many cases, the data sets we work with are typically too large to be uploaded to GitHub. As a result, a very common practice is storing your data in a folder, directly outside of your repository in a folder labeled "data".
+To simplify the following step, it is important to organize your folders in a way that makes sense for your workflow. In many cases, the data sets we work with are typically too large to be uploaded to GitHub. As a result, a common practice is storing your data in a folder, directly outside of your repository in a folder labeled "data".
 
 The code chunk below for `read.csv` demonstrates how to exit your current location using `..` and enter the desired folder location using `/`. It is important that your file path does not contain any spaces and is directly reflective of the file path for the data you wish to read in.
 
@@ -37,7 +41,14 @@ wind_data <- read.csv("../data/wind_data/wind_data_usa.csv")
 # reading in & storing data
 ```
 
-#### Confirm the Data Loaded Properly
+##### EJ Screen Data Potentially Use for Base Map
+
+```{r include=TRUE, eval=FALSE, warning=FALSE, error=FALSE}
+ejscreen <- st_read("../data/EJSCREEN_2023_BG_StatePct_with_AS_CNMI_GU_VI.gdb",
+                    quiet = TRUE)
+```
+
+##### Confirm the Data Loaded Properly
 
 ```{r}
 head(wind_data)                  # displays the first 6 rows of the data
@@ -68,29 +79,31 @@ wind_sf <- wind_data %>%             # calls desired dataset
                                      # creates geometry column with desired crs 
 ```
 
+### Check-in
+
+Were the lat/long columns correctly converted into a geometry column? `setdiff()` is a way to quickly determine the differences between two data sets.
+
+```{r}
+# seeing what is different
+setdiff(wind_data, wind_sf)
+```
+
+```{r}
+# checking column names
+print(colnames(wind_data))
+
+print(colnames(wind_sf))
+```
+
 #### **Confirm CRS is correct**
 
 ```{r}
-crs(wind_sf)                         # output should reveal WGS84, EPSG:4326
+glimpse(crs(wind_sf))                  # output should reveal WGS84, EPSG:4326
 ```
-
-#### Subsetting Wind Plant Locations in US
-
-\*\* double check written description here \*\*
-
-The code below selects only coordinates that intersect with the wind data and us mapping information
-
-```{r}
-wind_sf <- wind_sf[us,]                      # creates a combined subset of the                                                   wind data and the us}
-```
-
-#### Creating a Grid of Equal Area Polygons for Plant Plotting
-
-\*\* idea not necessarily necessary \*\*
 
 ## Initial Visualization of the Data
 
-**ggplot psuedocode**
+*ggplot psuedocode*
 
 ### Creating a Base Map Layer
 
@@ -99,38 +112,149 @@ Using the world dataset provided in the sf package, we will filter out the Unite
 *First attempt is not the best method because it does not include the states & their borders*
 
 ```{r}
-us <- world %>%                              # calls sf dataset
-  filter(name_long == "United States") %>%   # filters for states in the US
-  st_transform(us, crs = "EPSG:4326")        # converts the CRS to match wind_sf
+#us <- world %>%                              # calls sf dataset
+ # filter(name_long == "United States") %>%   # filters for states in the US
+  #st_transform(us, crs = "EPSG:4326")        # converts the CRS to match wind_sf
 
-us_map <- ggplot(us) +
-  geom_sf(color = 'black')
+#us_map <- ggplot(us) +
+ # geom_sf(color = 'black')
 
-us_map
+#us_map
 ```
 
 *Second attempt is missing Alaska and Hawaii but has borders*
 
 ```{r}
-usa <- st_as_sf(maps::map('state', fill = TRUE, plot = FALSE))
+#usa <- st_as_sf(maps::map('state', fill = TRUE, plot = FALSE))
 
-ggplot(usa) +
-  geom_sf(color = 'black',
-          fill = 'white',
-          size = 0.125) +
-  coord_sf(crs = st_crs(4326))
+#ggplot(usa) +
+ # geom_sf(color = 'black',
+  #        fill = 'white',
+   #       size = 0.125) +
+  #coord_sf(crs = st_crs(4326))
 ```
 
 *Third Attempt*
 
 ```{r}
-str(us_map())
+#str(us_map())
 
-us_states_for_mapping <- us_map(
-  regions = "states")
+#us_states_for_mapping <- us_map(
+ # regions = "states")
 
-ggplot(us_states_for_mapping) +
-  geom_sf(color = "black")
+#ggplot(us_states_for_mapping) +
+ # geom_sf(color = "black")
+```
+
+*Preliminary Plot of Wind Data*
+
+```{r}
+ggplot() +
+  geom_sf(data = wind_sf) 
+```
+
+*Fourth Attempt but EJ Screen Data*
+
+The issue with the ejscreen data are the inclusion of US territories found in region 9. Below I am working on a process to filter out those specific locations from the data without removing desired states in the Pacific region.
+
+```{r}
+ggplot() +
+  geom_sf(data = ejscreen)
+  geom_sf(data = wind_sf) 
+```
+
+#### Regions of Interest
+
+[Region Codes](https://ncsesdata.nsf.gov/docs/location.html) reveals the various regions throughout the US that are identifiable using codes between 1:10. US Territories are categorized under the Pacific Region Code, 9. Other states like CA, OR, HA, AK, and WA are also in the Pacific Category.
+
+```{r}
+unique(ejscreen$REGION)
+```
+
+#### Identifying the State Names for US Territories
+
+To properly filter out these unwanted observations, it's best to identify the exact names of the unwanted regions. We can do this using the `unique` function on the state_name column.
+
+```{r}
+print(unique(ejscreen$STATE_NAME))
+```
+
+#### Removing Regions Outside of Interest
+
+**not subsetting properly, maybe use** `subset()`
+
+```{r}
+us_basemap_data <- ejscreen %>% 
+  filter(STATE_NAME != c('Puerto Rico', 'Guam', 'Virgin Islands', 'Northern Mariana IS', 'American Samoa')) %>% 
+  filter(REGION != 10)
+```
+
+#### Next Idea: Create a Mask using US Country Coordinates
+
+[Geojson Coordinate Mapper for Masks](http://geojson.io/#map=2.59/42.2/-96.48)
+
+```{r}
+
+```
+
+*Preliminary Plot of Filtered EJScreen*
+
+```{r}
+ggplot() +
+  geom_sf(data = us_basemap_data) +
+  geom_sf(data = wind_sf) +
+  theme_bw()
+```
+
+**improperly subset, so unable to map**
+
+```{r}
+tmap_mode('view')
+
+tm_shape(us_basemap_data) +
+  tm_shape(wind_sf) 
+
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = us_basemap_data) +
+  geom_sf(data = wind_sf) +
+  theme_bw() +
+  labs(title = "US Wind Infrastructure Plants") 
+ # annotation_scale(plot_unit = "km") + # add scale bar
+  #annotation_north_arrow( # add north arrorw
+   # location = "tr",
+    #pad_x = unit(0.2, "in"),
+    #pad_y = unit(0.2, "in"),
+    #style = ggspatial::north_arrow_nautical( # customize north arrow
+     # fill = c("grey40", "white"),
+    #  line_col = "grey20"
+    #)
+#  )
+
+```
+
+## Subsetting Wind Plant Locations in US
+
+\*\* double check written description here \*\*
+
+The code below selects only coordinates that intersect with the wind data and us mapping information
+
+```{r}
+# wind_sf <- wind_sf[us_basemap_data,]       # creates a combined subset of the                                                   wind data and the us}
+```
+
+## Buffers
+
+Buffers create polygons representing a set distance from a feature.
+
+The buffer zone dimensions were selected to correlate with the research presented in "Replication Data for: Prevalence and predictors of wind energy opposition in North America".
+
+**Below is psuedocode for now until the cleaning is configured right**
+
+```{r include=TRUE}
+wind_data_buffer <- st_buffer(wind_sf, dist = 3000)
 ```
 
 ### Final Base Map of US
@@ -151,15 +275,7 @@ tm_shape(wind_sf) +
   tm_symbols('plant_name')
 ```
 
-## Buffers
-
-Buffers create polygons representing a set distance from a feature.
-
-**Below is psuedocode for now until the cleaning is configured right**
-
 ```{r include=TRUE}
-wind_data_buffer <- st_buffer(wind_data, dist = 5000)
-
 tm_shape(wind_data_buffer) +
   tm_polygons()
 ```
