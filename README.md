@@ -6,7 +6,7 @@ This documentation utilizes [U.S. Wind Data](https://dataverse.harvard.edu/datas
 
 The SOP covered in this documentation include:
 - Imporitng libraries & data
-- Prelimiary data observations and cleaning tactics
+- Prelimiary data observations, wrangling, and cleaning tactics
 - Merging datasets
 - Creating buffers
 - Mapping & Coordinate Reference Systems (CRS)
