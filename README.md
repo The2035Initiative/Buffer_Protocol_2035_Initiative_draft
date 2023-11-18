@@ -1,3 +1,4 @@
+![image](https://github.com/The2035Initiative/Buffer_Protocol_2035_Initiative_draft/assets/141206781/a801039a-1760-48e7-915c-76a41e71eac8)
 # Buffer Protocol 2035 Initiative draft
 This is a repo containing the rough draft for the 2035 Initiative standard operating procedures (SOP) for creating buffer zones around regions of interest (roi) and randomly selecting addresses within the roi buffer for sampling. Additionally, tools for basic statistical analysis of random samples will be reviewed. 
 
