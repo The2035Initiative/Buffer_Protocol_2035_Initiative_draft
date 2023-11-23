@@ -19,7 +19,7 @@ Analysis of these areas will provide insight into local resistance and spatially
 
 The following libraries were selected based on their functionality and ability to optimize our data for mapping.
 
-```{r}
+```{r, message = FALSE}
 # Loading Libraries
 library(tidyverse)        # essential r package 
 library(sf)               # package simplifies spatial dataframes
@@ -36,16 +36,11 @@ To simplify the following step, it is important to organize your folders in a wa
 
 The code chunk below for `read.csv` demonstrates how to exit your current location using `..` and enter the desired folder location using `/`. It is important that your file path does not contain any spaces and is directly reflective of the file path for the data you wish to read in.
 
+#### U.S. Wind Data
+
 ```{r}
-wind_data <- read.csv("../data/wind_data/wind_data_usa.csv")  
 # reading in & storing data
-```
-
-##### EJ Screen Data Potentially Use for Base Map
-
-```{r include=TRUE, eval=FALSE, warning=FALSE, error=FALSE}
-ejscreen <- st_read("../data/EJSCREEN_2023_BG_StatePct_with_AS_CNMI_GU_VI.gdb",
-                    quiet = TRUE)
+wind_data <- read.csv("../data/wind_data/wind_data_usa.csv")  
 ```
 
 ##### Confirm the Data Loaded Properly
@@ -55,19 +50,28 @@ head(wind_data)                  # displays the first 6 rows of the data
                                  # along with all of the columns 
 ```
 
+#### EJ Screen Data
+
+```{r include=TRUE, eval=FALSE, warning=FALSE, error=FALSE}
+ejscreen <- st_read("../data/EJSCREEN_2023_BG_StatePct_with_AS_CNMI_GU_VI.gdb",
+                    quiet = TRUE)
+# reads in raster data using the sf package st_read function
+# the quiet T/F input refers to information output after importing data
+```
+
 ## Wrangling & Subsetting
 
-*want:*
+want:
 
-*- a scaleable map of USA w/ state boundaries*
+-   a scalable map of USA w/ state boundaries
 
-*- the name of the plants as points*
+-   the name of the plants as points
 
-*- adjustable buffer zones (donuts) around the plants*
+-   adjustable buffer zones (donuts) around the plants
 
-*- ability to randomly select addresses within the buffer*
+-   ability to randomly select addresses within the buffer
 
-*- filter for specific groups of interest*
+-   filter for specific groups of interest
 
 ### **Converting lat/long into Raster Data (i.e. sticky geometries)**
 
@@ -79,12 +83,15 @@ wind_sf <- wind_data %>%             # calls desired dataset
                                      # creates geometry column with desired crs 
 ```
 
-### Check-in
+#### Check-point
 
-Were the lat/long columns correctly converted into a geometry column? `setdiff()` is a way to quickly determine the differences between two data sets.
+Let's stop and see if our outputs are what we expect.
+
+Were the lat/long columns correctly converted into a geometry column?
+
+`setdiff()` is a way to quickly determine the differences between two data sets.
 
 ```{r}
-# seeing what is different
 setdiff(wind_data, wind_sf)
 ```
 
@@ -97,75 +104,42 @@ print(colnames(wind_sf))
 
 #### **Confirm CRS is correct**
 
+Coordinate Reference Systems, CRS, are required in order for the data to be projected onto a map.
+
 ```{r}
 glimpse(crs(wind_sf))                  # output should reveal WGS84, EPSG:4326
 ```
 
 ## Initial Visualization of the Data
 
-*ggplot psuedocode*
+Using the base R function `plot()`, we can see that the geometries stored by this data set correlate to the locations of wind infrastructure plants throughout the United States. In order to visualize these locations with respect to state and county jurisdictions, we'll need to utilize another data set to create a base layer for our map.
+
+```{r}
+# First visual of the U.S. wind data provided by the geometry points
+plot(wind_sf$geometry)
+```
 
 ### Creating a Base Map Layer
 
-Using the world dataset provided in the sf package, we will filter out the United States
-
-*First attempt is not the best method because it does not include the states & their borders*
-
-```{r}
-#us <- world %>%                              # calls sf dataset
- # filter(name_long == "United States") %>%   # filters for states in the US
-  #st_transform(us, crs = "EPSG:4326")        # converts the CRS to match wind_sf
-
-#us_map <- ggplot(us) +
- # geom_sf(color = 'black')
-
-#us_map
-```
-
-*Second attempt is missing Alaska and Hawaii but has borders*
-
-```{r}
-#usa <- st_as_sf(maps::map('state', fill = TRUE, plot = FALSE))
-
-#ggplot(usa) +
- # geom_sf(color = 'black',
-  #        fill = 'white',
-   #       size = 0.125) +
-  #coord_sf(crs = st_crs(4326))
-```
-
-*Third Attempt*
-
-```{r}
-#str(us_map())
-
-#us_states_for_mapping <- us_map(
- # regions = "states")
-
-#ggplot(us_states_for_mapping) +
- # geom_sf(color = "black")
-```
-
-*Preliminary Plot of Wind Data*
-
 ```{r}
 ggplot() +
+  geom_sf(data = ejscreen) +
   geom_sf(data = wind_sf) 
+```
+
+*ggplot psuedocode*
+
+```{r}
+# group by state
 ```
 
 *Fourth Attempt but EJ Screen Data*
 
 The issue with the ejscreen data are the inclusion of US territories found in region 9. Below I am working on a process to filter out those specific locations from the data without removing desired states in the Pacific region.
 
-```{r}
-ggplot() +
-  geom_sf(data = ejscreen)
-  geom_sf(data = wind_sf) 
-```
-
 #### Regions of Interest
 
-[Region Codes](https://ncsesdata.nsf.gov/docs/location.html) reveals the various regions throughout the US that are identifiable using codes between 1:10. US Territories are categorized under the Pacific Region Code, 9. Other states like CA, OR, HA, AK, and WA are also in the Pacific Category.
+[Region Codes](https://ncsesdata.nsf.gov/docs/location.html) reveals the various regions throughout the US that are identifiable using codes between 1:10. US Territories are categorized under the Pacific Region Code, 9. Other states like CA, OR, HA, AK, and WA are also in the Pacific Region.
 
 ```{r}
 unique(ejscreen$REGION)
@@ -184,24 +158,113 @@ print(unique(ejscreen$STATE_NAME))
 **not subsetting properly, maybe use** `subset()`
 
 ```{r}
+nonmapping_territories <- c('Puerto Rico', 'Guam', 'Virgin Islands', 'Northern Mariana IS', 'American Samoa')
+
 us_basemap_data <- ejscreen %>% 
-  filter(STATE_NAME != c('Puerto Rico', 'Guam', 'Virgin Islands', 'Northern Mariana IS', 'American Samoa')) %>% 
-  filter(REGION != 10)
+  filter(STATE_NAME != nonmapping_territories) %>% 
+  filter(REGION != 10) %>% 
+  group_by(STATE_NAME)
 ```
 
 #### Next Idea: Create a Mask using US Country Coordinates
 
 [Geojson Coordinate Mapper for Masks](http://geojson.io/#map=2.59/42.2/-96.48)
 
-```{r}
+The regions of interest within of the United States are contained within the following coordinates:
 
+**( A helpful shortcut to fix indentation is highlighting any script and using ctrl+i )**
+
+-   `(-127.53756028744647, 48.89026620120862),`
+
+-   `(-127.53756028744647, 24.9290443910311),`
+
+-   `(-66.66926544935788, 24.9290443910311),`
+
+-   `(-127.53756028744647, 48.89026620120862)`
+
+These coordinates were then turned into a polygon using `st_polygon` and further converted into a simple feature collection (sfc) using `st_sfc()`. The CRS of this sfc was then converted to match the map to perform the crop.
+
+The coordinates were selected using [geojson.io](geojson by Mapbox).
+
+Our approach to mapping the entire region of interest, we will make polygons to represent Alaska, Hawaii, and mainland United States and combine them together to make a mask. This mask will then be used to crop the EJSCREEN data, optimizing it for mapping the regions containing information on public opinions and wind power infrastructure.
+
+#### Creating Polygons for Regions of Interest (roi)
+
+```{r}
+# creating polygons that represent our regions of interest (roi)
+
+mainland_states <- st_polygon(                            # creates a polygon with sf sticky geometries
+  list(                                                   # stores the values as a list
+    rbind(                                                # binds the following coordinates into a list
+      c(-127.53756028744647,                              # coordinates of the polygon roi
+        48.89026620120862),
+      c(-127.53756028744647,
+        24.9290443910311),
+      c(-66.66926544935788,
+        24.9290443910311),
+      c(-66.66926544935788,
+        48.89026620120862),
+      c(-127.53756028744647,
+        48.89026620120862)
+    )
+  )
+) %>% 
+  st_sfc(mainland_states) %>%                             # creates a special feature collection 
+  st_set_crs(4326) %>%                                    # assigns a CRS that matches our data sets
+  st_make_valid()                                         # corrects and invalid geometries 
+
+alaska <- st_polygon(
+  list(
+    rbind(
+      c(-140.2228758707459,
+        51.668928934953044),
+      c(-140.2228758707459,
+        71.43126120088658),
+      c(-195.54541333159068,
+        71.43126120088658),
+      c( -195.54541333159068,
+         51.668928934953044),
+      c(-140.2228758707459,
+        51.668928934953044)
+    )
+  )
+) %>% 
+  st_sfc(alaska) %>%                           
+  st_set_crs(4326) %>%                                    
+  st_make_valid()
+
+hawaii <- st_polygon(
+  list(
+    rbind(
+      c( -154.04703346642728,
+         18.040468043330847),
+      c(-154.04703346642728,
+        22.729375583644853),
+      c( -160.94922236072725,
+         22.729375583644853),
+      c(-160.94922236072725,
+        18.040468043330847),
+      c(-154.04703346642728,
+        18.040468043330847)
+    )
+  )
+) %>% 
+  st_sfc(hawaii) %>%                        
+  st_set_crs(4326) %>%                                    
+  st_make_valid()
 ```
 
-*Preliminary Plot of Filtered EJScreen*
+#### Making a Multipolygon
+
+```{r}
+states_polygon <- st_multipolygon(list(mainland_states, alaska, hawaii))
+```
+
+*Preliminary Plot of Cropped EJScreen*
 
 ```{r}
 ggplot() +
-  geom_sf(data = us_basemap_data) +
+  geom_sf(data = ejscreen_cropped) +
   geom_sf(data = wind_sf) +
   theme_bw()
 ```
@@ -278,4 +341,34 @@ tm_shape(wind_sf) +
 ```{r include=TRUE}
 tm_shape(wind_data_buffer) +
   tm_polygons()
+```
+
+## Randomly Selecting Addresses Within Buffer Zones
+
+```{r}
+
+```
+
+## Multivariate Linear Regression Models
+
+```{r}
+
+```
+
+## Interpreting Omitted Variable Bias (OVB)
+
+```{r}
+
+```
+
+## Logit
+
+```{r}
+
+```
+
+## Log Odds
+
+```{r}
+
 ```
