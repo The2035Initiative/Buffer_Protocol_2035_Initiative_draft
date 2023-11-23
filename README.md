@@ -12,5 +12,5 @@ The SOP covered in this documentation include:
 - Mapping & Coordinate Reference Systems (CRS)
 - Random sampling
 - Multivariate Linear Regression Models
-- Interpretting Omitted Variable Bias (OVB)
+- Interpreting Omitted Variable Bias (OVB)
 - Logit & Log Odds
