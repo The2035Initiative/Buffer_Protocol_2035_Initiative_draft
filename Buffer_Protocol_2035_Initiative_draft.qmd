@@ -21,13 +21,17 @@ The following libraries were selected based on their functionality and ability t
 
 ```{r, message = FALSE}
 # Loading Libraries
-library(tidyverse)        # essential r package 
-library(sf)               # package simplifies spatial dataframes
+library(tidyverse)      
+library(sf)               
 library(raster)
 library(tmap)
 library(terra)
 library(stars)
-library(smoothr)          # aesthetic and visual aid for buffers created
+library(smoothr)         
+library(maptiles)
+library(devtools)
+library(ggspatial)
+library(sp)
 ```
 
 ### Read in the Data
@@ -45,33 +49,12 @@ wind_data <- read.csv("../data/wind_data/wind_data_usa.csv")
 
 ##### Confirm the Data Loaded Properly
 
+Using gg`plot()`, we can see that the geometries stored by this data set correlate to the locations of wind infrastructure plants throughout the United States. In order to visualize these locations with respect to state and county jurisdictions, we'll need to utilize another data set to create a base layer for our map. Here, we'll use the `ggspatial` function `annotation_map_tile`.
+
 ```{r}
 head(wind_data)                  # displays the first 6 rows of the data
                                  # along with all of the columns 
 ```
-
-#### EJ Screen Data
-
-```{r include=TRUE, eval=FALSE, warning=FALSE, error=FALSE}
-ejscreen <- st_read("../data/EJSCREEN_2023_BG_StatePct_with_AS_CNMI_GU_VI.gdb",
-                    quiet = TRUE)
-# reads in raster data using the sf package st_read function
-# the quiet T/F input refers to information output after importing data
-```
-
-## Wrangling & Subsetting
-
-want:
-
--   a scalable map of USA w/ state boundaries
-
--   the name of the plants as points
-
--   adjustable buffer zones (donuts) around the plants
-
--   ability to randomly select addresses within the buffer
-
--   filter for specific groups of interest
 
 ### **Converting lat/long into Raster Data (i.e. sticky geometries)**
 
@@ -79,7 +62,7 @@ Below we will use the package `sf` to convert the lat/long data into a raster ge
 
 ```{r}
 wind_sf <- wind_data %>%             # calls desired dataset
-  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 3857) 
                                      # creates geometry column with desired crs 
 ```
 
@@ -87,225 +70,135 @@ wind_sf <- wind_data %>%             # calls desired dataset
 
 Let's stop and see if our outputs are what we expect.
 
-Were the lat/long columns correctly converted into a geometry column?
-
-`setdiff()` is a way to quickly determine the differences between two data sets.
+Were the lat/long columns correctly converted into a geometry column? `setdiff()` is a way to quickly determine the differences between two data sets.
 
 ```{r}
-setdiff(wind_data, wind_sf)
+setdiff(colnames(wind_data), colnames(wind_sf))
+setdiff(colnames(wind_sf), colnames(wind_data))
 ```
 
-```{r}
-# checking column names
-print(colnames(wind_data))
-
-print(colnames(wind_sf))
-```
-
-#### **Confirm CRS is correct**
-
-Coordinate Reference Systems, CRS, are required in order for the data to be projected onto a map.
-
-```{r}
-glimpse(crs(wind_sf))                  # output should reveal WGS84, EPSG:4326
-```
-
-## Initial Visualization of the Data
-
-Using the base R function `plot()`, we can see that the geometries stored by this data set correlate to the locations of wind infrastructure plants throughout the United States. In order to visualize these locations with respect to state and county jurisdictions, we'll need to utilize another data set to create a base layer for our map.
+If we plot our sf object, is it what we expect?
 
 ```{r}
 # First visual of the U.S. wind data provided by the geometry points
-plot(wind_sf$geometry)
+wind_plants <- ggplot(wind_sf) +
+  annotation_map_tile(type = "osm") +
+  geom_sf(col = 'darkgreen',
+          alpha = 0.5,
+          size = 3) 
+
+wind_plants
 ```
 
-### Creating a Base Map Layer
+### AOI Data
 
-```{r}
-ggplot() +
-  geom_sf(data = ejscreen) +
-  geom_sf(data = wind_sf) 
+#### Sweetwater, TX
+
+```{r include=TRUE, eval=FALSE, warning=FALSE, error=FALSE}
+tx <- st_read("../data/wind_data/tl_2023_48_tabblock20/tl_2023_48_tabblock20.shp",
+                      quiet = TRUE)
+
+# reads in raster data using the sf package st_read function
+# the quiet T/F input refers to information output after importing data
+
+st_transform(tx, "EPSG:3857")
+
+plot(tx$geometry)
 ```
 
-*ggplot psuedocode*
+## Wrangling & Subsetting
 
 ```{r}
-# group by state
-```
-
-*Fourth Attempt but EJ Screen Data*
-
-The issue with the ejscreen data are the inclusion of US territories found in region 9. Below I am working on a process to filter out those specific locations from the data without removing desired states in the Pacific region.
-
-#### Regions of Interest
-
-[Region Codes](https://ncsesdata.nsf.gov/docs/location.html) reveals the various regions throughout the US that are identifiable using codes between 1:10. US Territories are categorized under the Pacific Region Code, 9. Other states like CA, OR, HA, AK, and WA are also in the Pacific Region.
-
-```{r}
-unique(ejscreen$REGION)
-```
-
-#### Identifying the State Names for US Territories
-
-To properly filter out these unwanted observations, it's best to identify the exact names of the unwanted regions. We can do this using the `unique` function on the state_name column.
-
-```{r}
-print(unique(ejscreen$STATE_NAME))
-```
-
-#### Removing Regions Outside of Interest
-
-**not subsetting properly, maybe use** `subset()`
-
-```{r}
-nonmapping_territories <- c('Puerto Rico', 'Guam', 'Virgin Islands', 'Northern Mariana IS', 'American Samoa')
-
-us_basemap_data <- ejscreen %>% 
-  filter(STATE_NAME != nonmapping_territories) %>% 
-  filter(REGION != 10) %>% 
-  group_by(STATE_NAME)
-```
-
-#### Next Idea: Create a Mask using US Country Coordinates
-
-[Geojson Coordinate Mapper for Masks](http://geojson.io/#map=2.59/42.2/-96.48)
-
-The regions of interest within of the United States are contained within the following coordinates:
-
-**( A helpful shortcut to fix indentation is highlighting any script and using ctrl+i )**
-
--   `(-127.53756028744647, 48.89026620120862),`
-
--   `(-127.53756028744647, 24.9290443910311),`
-
--   `(-66.66926544935788, 24.9290443910311),`
-
--   `(-127.53756028744647, 48.89026620120862)`
-
-These coordinates were then turned into a polygon using `st_polygon` and further converted into a simple feature collection (sfc) using `st_sfc()`. The CRS of this sfc was then converted to match the map to perform the crop.
-
-The coordinates were selected using [geojson.io](geojson by Mapbox).
-
-Our approach to mapping the entire region of interest, we will make polygons to represent Alaska, Hawaii, and mainland United States and combine them together to make a mask. This mask will then be used to crop the EJSCREEN data, optimizing it for mapping the regions containing information on public opinions and wind power infrastructure.
-
-#### Creating Polygons for Regions of Interest (roi)
-
-```{r}
-# creating polygons that represent our regions of interest (roi)
-
-mainland_states <- st_polygon(                            # creates a polygon with sf sticky geometries
-  list(                                                   # stores the values as a list
-    rbind(                                                # binds the following coordinates into a list
-      c(-127.53756028744647,                              # coordinates of the polygon roi
-        48.89026620120862),
-      c(-127.53756028744647,
-        24.9290443910311),
-      c(-66.66926544935788,
-        24.9290443910311),
-      c(-66.66926544935788,
-        48.89026620120862),
-      c(-127.53756028744647,
-        48.89026620120862)
-    )
-  )
-) %>% 
-  st_sfc(mainland_states) %>%                             # creates a special feature collection 
-  st_set_crs(4326) %>%                                    # assigns a CRS that matches our data sets
-  st_make_valid()                                         # corrects and invalid geometries 
-
-alaska <- st_polygon(
+# bounding box of sweetwater tx, created using GeoJSON
+bbox = st_polygon(
   list(
     rbind(
-      c(-140.2228758707459,
-        51.668928934953044),
-      c(-140.2228758707459,
-        71.43126120088658),
-      c(-195.54541333159068,
-        71.43126120088658),
-      c( -195.54541333159068,
-         51.668928934953044),
-      c(-140.2228758707459,
-        51.668928934953044)
+      c(-100.51538367204945,
+        32.540732126848056),
+      c(-100.51538367204945,
+        32.39715128820876),
+      c(-100.26428210215887,
+        32.39715128820876),
+      c(-100.26428210215887,
+        32.540732126848056),
+      c(-100.51538367204945,
+        32.540732126848056)
     )
   )
-) %>% 
-  st_sfc(alaska) %>%                           
-  st_set_crs(4326) %>%                                    
-  st_make_valid()
-
-hawaii <- st_polygon(
-  list(
-    rbind(
-      c( -154.04703346642728,
-         18.040468043330847),
-      c(-154.04703346642728,
-        22.729375583644853),
-      c( -160.94922236072725,
-         22.729375583644853),
-      c(-160.94922236072725,
-        18.040468043330847),
-      c(-154.04703346642728,
-        18.040468043330847)
-    )
-  )
-) %>% 
-  st_sfc(hawaii) %>%                        
-  st_set_crs(4326) %>%                                    
-  st_make_valid()
+)
+# making bounding box an sf object for cropping later
+bbox <- bbox %>% 
+  st_sf() %>% 
+  st_set_crs(3857) %>% 
+  st_make_valid() 
 ```
 
-#### Making a Multipolygon
+#### **Confirm Characteristics Match**
+
+##### CRS? Extent?
+
+Coordinate Reference Systems, CRS, are required in order for the data to be projected onto a map.
+
+We need to convert the coordinate formats because the two do not currently match and it's making the plot look weird. To do this, we'll use the `sp` package to make them both decimal degrees.
 
 ```{r}
-states_polygon <- st_multipolygon(list(mainland_states, alaska, hawaii))
+roscoe_wind_farm <- st_transform(roscoe_wind_farm, CRS=CRS("+init=epsg:3857"))
+
+sphere.geoxyz
 ```
 
-*Preliminary Plot of Cropped EJScreen*
+```{r}
+extent(sweetwater) == extent(roscoe_wind_farm)
+
+extent(sweetwater)
+
+extent(roscoe_wind_farm)
+```
+
+```{r}
+# Crop the tx shapefile to only sweetwater bbox bounds. Some crs wrangling & checking needed before we can crop & plot.
+st_crs(tx) == st_crs(bbox)
+
+sweetwater <- st_crop(tx, bbox) %>% 
+  st_sf() %>% 
+  st_transform(3857) %>% 
+  st_make_valid()
+
+
+ggplot(sweetwater) +
+  geom_sf(aes(size = HOUSING20), color = 'blue')
+
+```
+
+```{r}
+roscoe_wind_farm <- wind_sf %>% 
+  filter(plant_name %in% "roscoe wind farm llc") %>% 
+  st_sf() %>% 
+  st_transform(3857) %>% 
+  st_make_valid()
+
+# visualize roscoe wind farm llc in sweetwater, tx 
+ggplot(roscoe_wind_farm) +
+  annotation_map_tile(type = "osm") +
+  geom_sf(col = 'darkgreen',
+          alpha = 0.5,
+          size = 3) 
+```
+
+want:
+
+-   a map of Sweetwater, TX
+
+-   the name of roscoe wind farm llc wind plant as a point with a 3km buffer donut around it
+
+-   ability to randomly select addresses within the buffer
+
+-   bonus: filter for specific groups of interest
 
 ```{r}
 ggplot() +
-  geom_sf(data = ejscreen_cropped) +
-  geom_sf(data = wind_sf) +
-  theme_bw()
-```
-
-**improperly subset, so unable to map**
-
-```{r}
-tmap_mode('view')
-
-tm_shape(us_basemap_data) +
-  tm_shape(wind_sf) 
-
-```
-
-```{r}
-ggplot() +
-  geom_sf(data = us_basemap_data) +
-  geom_sf(data = wind_sf) +
-  theme_bw() +
-  labs(title = "US Wind Infrastructure Plants") 
- # annotation_scale(plot_unit = "km") + # add scale bar
-  #annotation_north_arrow( # add north arrorw
-   # location = "tr",
-    #pad_x = unit(0.2, "in"),
-    #pad_y = unit(0.2, "in"),
-    #style = ggspatial::north_arrow_nautical( # customize north arrow
-     # fill = c("grey40", "white"),
-    #  line_col = "grey20"
-    #)
-#  )
-
-```
-
-## Subsetting Wind Plant Locations in US
-
-\*\* double check written description here \*\*
-
-The code below selects only coordinates that intersect with the wind data and us mapping information
-
-```{r}
-# wind_sf <- wind_sf[us_basemap_data,]       # creates a combined subset of the                                                   wind data and the us}
+  geom_sf(data = sweetwater$geometry) +
+  geom_sf(data = roscoe_wind_farm$geometry)
 ```
 
 ## Buffers
@@ -316,59 +209,8 @@ The buffer zone dimensions were selected to correlate with the research presente
 
 **Below is psuedocode for now until the cleaning is configured right**
 
-```{r include=TRUE}
-wind_data_buffer <- st_buffer(wind_sf, dist = 3000)
-```
-
-### Final Base Map of US
-
--   Need to include state lines for greater understanding and accuracy for collecting addresses
-
 ```{r}
-
+roscoe_wind_farm_buffer <- st_buffer(roscoe_wind_farm, dist = 3000)
 ```
 
-**tmap psuedocode**
-
-```{r}
-tmap_mode('view')
-
-tm_shape(wind_sf) +
-  tm_polygons() +
-  tm_symbols('plant_name')
-```
-
-```{r include=TRUE}
-tm_shape(wind_data_buffer) +
-  tm_polygons()
-```
-
-## Randomly Selecting Addresses Within Buffer Zones
-
-```{r}
-
-```
-
-## Multivariate Linear Regression Models
-
-```{r}
-
-```
-
-## Interpreting Omitted Variable Bias (OVB)
-
-```{r}
-
-```
-
-## Logit
-
-```{r}
-
-```
-
-## Log Odds
-
-```{r}
-
-```
+------------------------------------------------------------------------

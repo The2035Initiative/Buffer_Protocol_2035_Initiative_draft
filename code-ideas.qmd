@@ -1,3 +1,210 @@
+want:
+
+a scalable map of USA w/ state boundaries
+
+the name of the plants as points
+
+adjustable buffer zones (donuts) around the plants
+
+ability to randomly select addresses within the buffer
+
+filter for specific groups of interest
+## Initial Visualization of the Data
+
+#### Regions of Interest
+
+[Region Codes](https://ncsesdata.nsf.gov/docs/location.html) reveals the various regions throughout the US that are identifiable using codes between 1:10. US Territories are categorized under the Pacific Region Code, 9. Other states like CA, OR, HA, AK, and WA are also in the Pacific Region.
+
+```{r}
+unique(ejscreen$REGION)
+```
+
+#### Identifying the State Names for US Territories
+
+To properly filter out these unwanted observations, it's best to identify the exact names of the unwanted regions. We can do this using the `unique` function on the state_name column.
+
+```{r}
+print(unique(ejscreen$STATE_NAME))
+```
+
+#### Removing Regions Outside of Interest
+
+**not subsetting properly, maybe use** `subset()`
+
+```{r}
+nonmapping_territories <- c('Puerto Rico', 'Guam', 'Virgin Islands', 'Northern Mariana IS', 'American Samoa')
+
+us_basemap_data <- ejscreen %>% 
+  filter(STATE_NAME != nonmapping_territories) %>% 
+  filter(REGION != 10) %>% 
+  group_by(STATE_NAME)
+```
+
+#### Next Idea: Create a Mask using US Country Coordinates
+
+[Geojson Coordinate Mapper for Masks](http://geojson.io/#map=2.59/42.2/-96.48)
+
+The regions of interest within of the United States are contained within the following coordinates:
+
+**( A helpful shortcut to fix indentation is highlighting any script and using ctrl+i )**
+
+-   `(-127.53756028744647, 48.89026620120862),`
+
+-   `(-127.53756028744647, 24.9290443910311),`
+
+-   `(-66.66926544935788, 24.9290443910311),`
+
+-   `(-127.53756028744647, 48.89026620120862)`
+
+These coordinates were then turned into a polygon using `st_polygon` and further converted into a simple feature collection (sfc) using `st_sfc()`. The CRS of this sfc was then converted to match the map to perform the crop.
+
+The coordinates were selected using [geojson.io](geojson%20by%20Mapbox).
+
+Our approach to mapping the entire region of interest, we will make polygons to represent Alaska, Hawaii, and mainland United States and combine them together to make a mask. This mask will then be used to crop the EJSCREEN data, optimizing it for mapping the regions containing information on public opinions and wind power infrastructure.
+
+#### Creating Polygons for Regions of Interest (roi)
+
+```{r}
+# creating polygons that represent our regions of interest (roi)
+
+mainland_states <- st_polygon(                            # creates a polygon with sf sticky geometries
+  list(                                                   # stores the values as a list
+    rbind(                                                # binds the following coordinates into a list
+      c(-127.53756028744647,                              # coordinates of the polygon roi
+        48.89026620120862),
+      c(-127.53756028744647,
+        24.9290443910311),
+      c(-66.66926544935788,
+        24.9290443910311),
+      c(-66.66926544935788,
+        48.89026620120862),
+      c(-127.53756028744647,
+        48.89026620120862)
+    )
+  )
+) %>% 
+  st_sfc(mainland_states) %>%                             # creates a special feature collection 
+  st_set_crs(4326) %>%                                    # assigns a CRS that matches our data sets
+  st_make_valid()                                         # corrects and invalid geometries 
+
+alaska <- st_polygon(
+  list(
+    rbind(
+      c(-140.2228758707459,
+        51.668928934953044),
+      c(-140.2228758707459,
+        71.43126120088658),
+      c(-195.54541333159068,
+        71.43126120088658),
+      c( -195.54541333159068,
+         51.668928934953044),
+      c(-140.2228758707459,
+        51.668928934953044)
+    )
+  )
+) %>% 
+  st_sfc(alaska) %>%                           
+  st_set_crs(4326) %>%                                    
+  st_make_valid()
+
+hawaii <- st_polygon(
+  list(
+    rbind(
+      c( -154.04703346642728,
+         18.040468043330847),
+      c(-154.04703346642728,
+        22.729375583644853),
+      c( -160.94922236072725,
+         22.729375583644853),
+      c(-160.94922236072725,
+        18.040468043330847),
+      c(-154.04703346642728,
+        18.040468043330847)
+    )
+  )
+) %>% 
+  st_sfc(hawaii) %>%                        
+  st_set_crs(4326) %>%                                    
+  st_make_valid()
+```
+
+#### Making a Multipolygon
+
+```{r}
+states_polygon <- st_multipolygon(list(mainland_states, alaska, hawaii))
+```
+
+*Preliminary Plot of Cropped EJScreen*
+
+```{r}
+ggplot() +
+  geom_sf(data = ejscreen_cropped) +
+  geom_sf(data = wind_sf) +
+  theme_bw()
+```
+
+**improperly subset, so unable to map**
+
+```{r}
+tmap_mode('view')
+
+tm_shape(us_basemap_data) +
+  tm_shape(wind_sf) 
+
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = us_basemap_data) +
+  geom_sf(data = wind_sf) +
+  theme_bw() +
+  labs(title = "US Wind Infrastructure Plants") 
+ # annotation_scale(plot_unit = "km") + # add scale bar
+  #annotation_north_arrow( # add north arrorw
+   # location = "tr",
+    #pad_x = unit(0.2, "in"),
+    #pad_y = unit(0.2, "in"),
+    #style = ggspatial::north_arrow_nautical( # customize north arrow
+     # fill = c("grey40", "white"),
+    #  line_col = "grey20"
+    #)
+#  )
+
+```
+
+## Subsetting Wind Plant Locations in US
+
+\*\* double check written description here \*\*
+
+The code below selects only coordinates that intersect with the wind data and us mapping information
+
+```{r}
+# wind_sf <- wind_sf[us_basemap_data,]       # creates a combined subset of the                                                   wind data and the us}
+```
+
+```{r}
+tmap_mode('view')
+
+tm_shape(sweetwater) +
+  tm_shape(roscoe_wind_farm_buffer) +
+  tm_symbols('plant_name')
+```
+
+
+```{r include=TRUE}
+tm_shape(wind_data_buffer) +
+  tm_polygons()
+```
+
+```{r}
+
+```
+
+
+
+
+
+
 ```{r}
 # This is likely not going to be used bc it's so length and not good for a demo
 # Defining the largest region of interest (roi) with a more detailed polygon
