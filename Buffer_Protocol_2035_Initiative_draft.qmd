@@ -9,12 +9,6 @@ editor: visual
 
 # Protocol for Creating Buffer Zones & Selecting Random Addresses in Buffer Regions
 
-The following code describes a step-by-step process for creating a map containing buffer zones around points of interest. In this documentation, the data utilized is the [US Wind Data](https://dataverse.harvard.edu/file.xhtml?fileId=7339850&version=1.0), this data is associated with the "Replication Data for: Prevalence and predictors of wind energy opposition in North America", <https://doi.org/10.7910/DVN/LE2V0R>, Harvard Dataverse, V1, 2023. The collaborators on that project include: Stokes, Leah; Franzblau, Emma; Lovering, Jessica R.; Miljanich, Chris.
-
-\~ include more about what the data is about and the outcomes of making visualization \~
-
-Analysis of these areas will provide insight into local resistance and spatially distorted signalling in relation to wind power infrastructure and climate policy.
-
 ### Loading Libraries
 
 The following libraries were selected based on their functionality and ability to optimize our data for mapping.
@@ -33,7 +27,20 @@ library(devtools)
 library(ggspatial)
 library(sp)
 library(RColorBrewer)
+library(plotly)
 ```
+
+## Main Function
+
+The function allow includes the standard operating procedure for identifying `surveying_points` in regions of interest
+
+```{r}
+
+```
+
+## Step-by-Step Walk Through of the Function
+
+The following code describes a step-by-step process for identifying `surveying_points`protocol. Together, we will be creating a map containing buffer zones around points of interest. In this example documentation, the data utilized was the [US Wind Data](https://dataverse.harvard.edu/file.xhtml?fileId=7339850&version=1.0), this data is associated with the "Replication Data for: Prevalence and predictors of wind energy opposition in North America", <https://doi.org/10.7910/DVN/LE2V0R>, Harvard Dataverse, V1, 2023. The collaborators on that project include: Stokes, Leah; Franzblau, Emma; Lovering, Jessica R.; Miljanich, Chris. Analysis of these areas will provide insight into local resistance and spatially distorted signalling in relation to wind power infrastructure and climate policy.
 
 ### Read in the Data
 
@@ -91,19 +98,37 @@ wind_plants <- ggplot(wind_sf) +
 wind_plants
 ```
 
+## Selecting a Wind Farm
+
 ```{r}
-roscoe_wind_farm <- wind_sf %>% 
+# create a function to select a plant name
+select_wind_farm <- function(plant_name) {
+  wind_sf %>% 
+  filter(plant_name %in% "roscoe wind farm llc") %>% 
+  st_sf() %>% 
+  st_transform(4326) %>% 
+  st_make_valid()
+}
+
+# filter for the plant name observation roscoe wind farm llc
+wind_farm <- select_wind_farm("roscoe wind farm llc")
+
+# filter for the plant name observation roscoe wind farm llc
+wind_farm <- wind_sf %>% 
   filter(plant_name %in% "roscoe wind farm llc") %>% 
   st_sf() %>% 
   st_transform(4326) %>% 
   st_make_valid()
 
-extent(roscoe_wind_farm)
+# where is our wind farm located?
+extent(wind_farm)
 ```
+
+### Let's take at look at our wind farm of interest!
 
 ```{r}
 # visualize roscoe wind farm llc in sweetwater, tx 
-ggplot(roscoe_wind_farm) +
+ggplot(wind_farm) +
   annotation_map_tile(type = "osm") +
   geom_sf(col = 'darkgreen',
           alpha = 0.5,
@@ -112,21 +137,23 @@ ggplot(roscoe_wind_farm) +
 
 ### AOI Data
 
+Below, we will read in some data corresponding to the state of interest. In this example, we are loading in a shapefile for Texas.
+
 #### Nolan County, TX
 
 ```{r include=TRUE, eval=FALSE, warning=FALSE, error=FALSE}
-tx <- st_read("../data/wind_data/tl_2023_48_tabblock20/tl_2023_48_tabblock20.shp",
+# read in data corresponding to the state of interest. In this example, we are loading in a shapefile for Texas.
+state <- st_read("../data/wind_data/tl_2023_48_tabblock20/tl_2023_48_tabblock20.shp",
                       quiet = TRUE)
 
 # reads in raster data using the sf package st_read function
 # the quiet T/F input refers to information output after importing data
 
-tx <- st_transform(tx, "EPSG:4326")
-
-#plot(tx$geometry)
+# Setting the CRS for our state shapefile
+state <- st_transform(state, "EPSG:4326")
 ```
 
-## Wrangling & Subsetting
+## Wrangling & Sub-setting
 
 When crafting a bounding box, we need to remember our goal:
 
@@ -135,6 +162,10 @@ When crafting a bounding box, we need to remember our goal:
 Note: for every 0.01 change in coordinate decimal degrees equates to 1.11 km in distance.
 
 The extent of our wind plant of interest is roughly (100.67, 32.47). Therefore, we expect our buffer extent to be within ± 0.03 of the extent. To graph a wider perspective, we will make our bounding box 0.06 beyond the wind plant extent.
+
+## Creating a Bounding Box for our Area of Interest (AOI)
+
+I want to create a function that can automatically determine a bounding box region according to the extent of the wind farm.
 
 ```{r}
 # bounding box of sweetwater tx, created using GeoJSON
@@ -162,20 +193,35 @@ bbox <- bbox %>%
   st_make_valid() 
 
 # Crop the tx shapefile to only sweetwater bbox bounds. Some crs wrangling & checking needed before we can crop & plot.
-st_crs(tx) == st_crs(bbox)
+st_crs(state) == st_crs(bbox)
 ```
 
+#### Quick Visualization of bbox created for our aoi, overlayed with the wind farm's location.
+
+Notes:
+Improve background color, point style, size, and color, adjust graticules, include scalebar and compass.
 ```{r}
-# Crop tx shapefile to our bounding box extent
-nolan_county <- st_crop(tx, bbox) %>% 
+# Crop shapefile of tx to our bounding box extent
+aoi <- st_crop(state, bbox) %>% 
   st_sf() %>% 
   st_transform(4326) %>% 
   st_make_valid()
 
-# check it was properly cropped
-ggplot(nolan_county) +
-  geom_sf(aes(color = POP20)) 
+# visualization of our wind farm overlayed ontop of our aoi.
+ggplot() +
+  geom_sf(data = aoi$geometry) +
+  geom_sf(data = wind_farm$geometry, 
+          color = "turquoise",
+          size = 3)
 ```
+
+## Buffers
+
+Buffers create polygons representing a set distance from a feature.
+
+The buffer zone dimensions were selected to correlate with the research presented in "Replication Data for: Prevalence and predictors of wind energy opposition in North America".
+
+### Visualization of Geo-locations to Extract for Surveying
 
 want:
 
@@ -187,41 +233,17 @@ want:
 
 -   bonus: filter for specific groups of interest
 
-```{r}
-ggplot() +
-  geom_sf(data = nolan_county$geometry) +
-  geom_sf(data = roscoe_wind_farm$geometry, 
-          color = "hotpink",
-          size = 3)
-```
-
-## Buffers
-
-Buffers create polygons representing a set distance from a feature.
-
-The buffer zone dimensions were selected to correlate with the research presented in "Replication Data for: Prevalence and predictors of wind energy opposition in North America".
-
-**Below is psuedocode for now until the cleaning is configured right**
-
-```{r}
-roscoe_wind_farm_buffer <- st_buffer(roscoe_wind_farm, dist = 3000) 
-```
-
-------------------------------------------------------------------------
-
-### Visualization for Extracting Geo-locations
-
 Notes to improve map:
 
-Better scalebar, compass, graticules - move outside of map. More informative binning that applies to the buffer region. (Is there a way to automate this process?) Move legend to the right. Include the name of the power plant. Include the block or tract ids for the regions within the buffer (maybe subset nolan_county from buffer object). Better colors
+Better scalebar, compass, graticules - move outside of map. More informative binning that applies to the buffer region. (Is there a way to automate this process?) Move legend to the right. Include the name of the power plant. Include the block or tract ids for the regions within the buffer (maybe subset nolan_county from buffer object). Better colors. Add name of wind plant too.
 
 ```{r}
-tm_shape(nolan_county) +
+tm_shape(aoi) +
   tm_polygons('POP20',
               palette = 'Purples') +
-tm_shape(roscoe_wind_farm_buffer) +
+tm_shape(wind_farm_buffer) +
   tm_polygons(alpha = 0.3) +
-  tm_shape(roscoe_wind_farm) +
+  tm_shape(wind_farm) +
   tm_bubbles(fill = 'tan',
           title = 'Roscoe Wind Farm LLC') +
   tm_scalebar(position = c('left', 'bottom')) +
@@ -233,26 +255,85 @@ tm_shape(roscoe_wind_farm_buffer) +
     #         size = 2)
 ```
 
+### Creating & Isolating a 3 km Buffer Region in our AOI
+
+First, we will create a 3 km buffer around the wind farm.
+
+Next, we will find the geo-points bordering and within our buffer aoi.
+
+`st_intersection` combines the locations from the buffer and our aoi that intersect. This will combine all of the variables from both data sets.
+
+`st_filter` applying `.predicate = st_within` filters the points in our aoi that fall within the wind_farm_buffer. The only information contained in this output are variables from the aoi data set.
+
 ```{r}
-# Plot median income of Houston census tracts as continuous variable and whether census tract was impacted as discrete variable
-ggplot() +
-  geom_sf(data = nolan_county, aes(fill = POP20), palette = "Purples") +
-  geom_sf(data = roscoe_wind_farm_buffer, fill = "transparent") +
-  scale_color_discrete(name = "") +
-  labs(title = "Buffer AOI Within 3 km of Roscoe Wind Farm LLC: Nolan County, TX") +
-  annotation_scale(location = "br", width_hint = 0.2) +
-  annotation_north_arrow(location = "br", which_north = "true", pad_x = unit(0.1, "npc"), pad_y = unit(0.1, "npc"))
+# create a 3 km buffer around the wind farm
+wind_farm_buffer <- st_buffer(wind_farm, dist = 3000) 
+
+# combine the locations from the buffer and our aoi that intersect. 
+# for some reason, I haven't been able to get st_filter join = st_intersects to work, so we're using st_intersection for now
+areas_bordering_buffer <- st_intersection(aoi, wind_farm_buffer)
+
+# filter the points in our aoi that fall within the wind_farm_buffer. The only information contained in this output are variables from the aoi data set.
+areas_within_buffer <- st_filter(aoi, wind_farm_buffer, .predicate = st_within)
+
+# include the variables from wind_farm_buffer that correspond to the observations in areas_within_buffer
+areas_within_buffer <-st_join(areas_within_buffer, wind_farm_buffer, st_intersects)
 ```
 
-### Geo-locating Neighborhoods to Survey
+### Inspecting our Surveying AOI
+
+We're going to retrieve the coordinates from the matrix containing the locations withiin the aoi buffer region. These are the most ideal locations for surveying.
+
+The output will contain integer indicators that provide some insight into the kind of structure(s) are associated with each coordinate. More information can be found [here](https://r-spatial.github.io/sf/reference/st_coordinates.html) and [here](https://search.r-project.org/CRAN/refmans/sf/html/st_coordinates.html).
+
+In this case, our outputs contain `L1` that has a single output of 1. This indicates these values are on the exterior ring of the buffer. When `L1` is greater than 1, then the associated coordinate is within the interior ring.
+
+`L2` refers to the simple feature, for the polygon on multipolygon `L1` describes.
+
+`L3` 
+
+#### Creating a sf object containing the coordinates of surveying points within our AOI.
+
+Firstly, we will retrieve the coordinates from the matrix containing the locations within and intersecting the aoi buffer region. Next, we will combine both regions of interest and saving the surveying points as an sf object with the CRS 4326. Finally, we will remove any replicated geometric points by grouping them together and confirm the number of unique observations is equal to the number of observations in our sf object.
+
+```{r}
+# Retrieve the coordinates from the matrix containing the locations within the aoi buffer region. 
+surveying_points_within <- st_coordinates(areas_within_buffer) %>% 
+  as.data.frame() %>% 
+  print(ncol)
+
+# Retrieve the coordinates from the matrix containing the locations bordering the aoi buffer region.
+surveying_points_bordering <- st_coordinates(areas_bordering_buffer) %>% 
+  as.data.frame() %>% 
+  print(ncol)
+
+# combining both regions of interest.
+surveying_points <- full_join(surveying_points_within, surveying_points_bordering) 
+
+# saving the surveying points as an sf object with the CRS 4326. 
+surveying_points <- surveying_points %>% 
+  st_as_sf(coords = c("X", "Y")) %>% 
+  st_set_crs(4326)
+
+# Remove any replicated geometric points by grouping them together.
+surveying_points <- surveying_points %>% 
+  group_by_all(sf_column_name = geometry) %>% 
+  distinct()  
+
+# confirm the number of unique observations is equal to the number of observations in our sf object.
+nrow(unique(surveying_points)) == nrow(surveying_points)
+```
+
+### Geo-locating Neighborhoods to Survey Visualization
+
+```{r}
+
+```
+
 
 want:
 
 -   extract tract id / block id / addresses from buffer region
-
-```{r}
-
-```
 
 ### Function to Automate our Process
 
