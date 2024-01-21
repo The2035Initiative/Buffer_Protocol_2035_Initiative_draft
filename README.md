@@ -10,7 +10,4 @@ The SOP covered in this documentation include:
 - Merging datasets
 - Creating buffers
 - Mapping & Coordinate Reference Systems (CRS)
-- Random sampling
-- Multivariate Linear Regression Models
-- Interpreting Omitted Variable Bias (OVB)
-- Logit & Log Odds
+- Identifying Geo-Points Within Buffer Region AOI for Surveying
