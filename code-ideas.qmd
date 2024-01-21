@@ -1,3 +1,98 @@
+
+
+
+
+
+
+
+library(maptools)
+library(osmar)
+url <- "http://osmar.r-forge.r-project.org/"
+file <- "http://download.geofabrik.de/north-america/us-latest.osm.pbf"
+download.file(sprintf("%s%s", url, file), file)
+unzip("gzip -d muenchen.osm.gz") # gzip is linux only, on windows I unzipped this manually with 7zip!
+
+src <- osmsource_osmosis(file = "muenchen.osm")
+muc_bbox <- center_bbox(11.575278, 48.137222, 3000, 3000)
+muc <- get_osm(muc_bbox, src)
+muc
+summary(muc)
+
+building_ids <- find(muc, way(tags(k == "addr:street")))
+building_ids <- find_down(muc, way(building_ids))
+hw <- subset(muc, ids = building_ids)
+
+plot(muc)
+plot_ways(hw, add = TRUE, col = "green")
+
+# convert to spatial object (SpatialLinesDataFrame)
+# and save to whatever format you like..
+hw_line <- as_sp(hw, "lines")
+
+library(data.table)
+dt <- fread("curl http://download.geofabrik.de/north-america/us/texas-latest-free.shp.zip | tar -xf- --to-stdout *texas-latest-free-shp.zip")
+
+
+
+
+
+
+
+
+###### Voronoi tesselation
+
+"Thiessen polygon maps, which are also called Voronoi diagrams, are used to define and to delineate proximal regions around individual data points by using polygonal boundaries."\[Source\]\['https://www.sciencedirect.com/topics/earth-and-planetary-sciences/voronoi-diagram#:\~:text=Thiessen%20polygon%20maps%2C%20which%20are,points%20by%20using%20polygonal%20boundaries.'\]
+
+```{r}
+#st_no_overlap <- function(polygons) {
+
+ # centroids <- st_centroid(polygons)
+
+  # Voronoi tesselation
+  #voronoi <-
+   # centroids %>%
+    #st_geometry() %>%
+    #st_union() %>%
+    #st_voronoi() %>%
+    #st_collection_extract() %>% 
+    #st_overlaps(st_set_precision(st_no_overlap(st_sf(geometry = areas_bordering_buffer))))
+
+  # Put them back in their original order
+  #voronoi <- voronoi[unlist(st_intersects(centroids, voronoi))]
+
+  # Keep the attributes
+  #result <- centroids
+
+  # Intersect voronoi zones with polygons
+  #st_geometry(result) <-
+   # mapply(function(x, y) st_intersection(x, y),
+    #       st_geometry(polygons),
+     #      voronoi,
+      #     SIMPLIFY = FALSE) %>%
+  #  st_sf(crs = st_crs(polygons, 4326))
+
+  #result
+#}
+
+
+# applying this function, could not properly triangulate 
+#areas_bordering_buffer_2 <- st_no_overlap(areas_bordering_buffer$geometry)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 want:
 
 a scalable map of USA w/ state boundaries

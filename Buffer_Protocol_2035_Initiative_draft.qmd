@@ -4,6 +4,7 @@ author: "Sofia Ingersoll"
 format: html
 editor: visual
 ---
+
 *Rough Draft pls no judging yet*
 
 # Protocol for Creating Buffer Zones & Selecting Random Addresses in Buffer Regions
@@ -13,7 +14,7 @@ editor: visual
 The following libraries were selected based on their functionality and ability to optimize our data for mapping.
 
 ```{r, message = FALSE}
-# Loading Libraries
+#------Loading Libraries---------
 library(tidyverse)      
 library(sf)               
 library(raster)
@@ -51,6 +52,7 @@ The code chunk below for `read.csv` demonstrates how to exit your current locati
 #### U.S. Wind Data
 
 ```{r}
+#--------Read in Data----------------
 # reading in & storing data
 wind_data <- read.csv("../data/wind_data/wind_data_usa.csv")  
 ```
@@ -60,6 +62,7 @@ wind_data <- read.csv("../data/wind_data/wind_data_usa.csv")
 Using gg`plot()`, we can see that the geometries stored by this data set correlate to the locations of wind infrastructure plants throughout the United States. In order to visualize these locations with respect to state and county jurisdictions, we'll need to utilize another data set to create a base layer for our map. Here, we'll use the `ggspatial` function `annotation_map_tile`.
 
 ```{r}
+#-----------Inspecting Data-----------
 head(wind_data)                  # displays the first 6 rows of the data
                                  # along with all of the columns 
 ```
@@ -69,6 +72,7 @@ head(wind_data)                  # displays the first 6 rows of the data
 Below we will use the package `sf` to convert the lat/long data into a raster geometry column. In this single line, we will also be assigning the CRS EPSG:4326 to the sf data frame. The CRS was selected because it provides a relatively proportionate display of the United States. We are open to suggestions regarding our CRS if a different project better fits our data.
 
 ```{r}
+#-------------Converting df to sf Object--------------
 wind_sf <- wind_data %>%             # calls desired dataset
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
                                      # creates geometry column with desired crs 
@@ -81,83 +85,261 @@ Let's stop and see if our outputs are what we expect.
 Were the lat/long columns correctly converted into a geometry column? `setdiff()` is a way to quickly determine the differences between two data sets.
 
 ```{r}
+#-----------Determine the Column Differences----------
 setdiff(colnames(wind_data), colnames(wind_sf))
 setdiff(colnames(wind_sf), colnames(wind_data))
 ```
 
-If we plot our sf object, is it what we expect?
+If we plot our sf object, is it what we expect? Our plot is interactive, so we may zoom in to different regions of interest and select specific wind farms to access information like plant name, state, region, general sensus information, and other variables includes in the [US Wind Data](https://dataverse.harvard.edu/file.xhtml?fileId=7339850&version=1.0) set.
 
 ```{r}
+#--------------Map of US Wind Farms--------------------
 # First visual of the U.S. wind data provided by the geometry points
-wind_plants <- ggplot(wind_sf) +
-  annotation_map_tile(type = "osm") +
-  geom_sf(col = 'darkgreen',
-          alpha = 0.5,
-          size = 3) 
+tmap_mode('view')
 
-wind_plants
+wind_plants_map <- tm_shape(wind_sf) +
+  tm_basemap(leaflet::providers$Esri.WorldImagery) +
+  tm_bubbles(fill = 'skyblue') +
+  tm_scalebar(position = c('left', 'bottom')) +
+  tm_title('US Wind Farms')
+
+wind_plants_map
 ```
 
 ## Selecting a Wind Farm
 
 ```{r}
+#---------Function for Selecting Wind Farms--------
 # create a function to select a plant name
 select_wind_farm <- function(plant_name, data) {
-  wind_sf
+  wind_sf %>% 
   filter(plant_name %in% "roscoe wind farm llc") %>% 
   st_sf() %>% 
   st_transform(4326) %>% 
   st_make_valid()
 }
 
+#---------Applying Function-------------------------
 # filter for the plant name observation roscoe wind farm llc
 wind_farm <- select_wind_farm("roscoe wind farm llc", data = wind_sf)
 
-# filter for the plant name observation roscoe wind farm llc
-wind_farm <- wind_sf %>% 
-  filter(plant_name %in% "roscoe wind farm llc") %>% 
-  st_sf() %>% 
-  st_transform(4326) %>% 
-  st_make_valid()
-
+#---------Checking Extent of Wind Farm Geo-Point----
 # where is our wind farm located?
 extent(wind_farm)
 ```
 
 ### Let's take at look at our wind farm of interest!
 
-```{r}
-# visualize roscoe wind farm llc in sweetwater, tx 
-ggplot(wind_farm) +
-  annotation_map_tile(type = "osm") +
-  geom_sf(fill = 'darkgreen',
-          alpha = 0.5,
-          size = 3) 
+Note: see about setting a closer zoom when first opening
 
-# visualization of our wind farm overlayed ontop of our aoi.
+```{r}
+#--------------Map of Wind Farm---------------
+# visualization of our wind farm (roscoe wind farm llc) overlayed ontop of our aoi (Nolan & Fisher Counties, TX).
 tmap_mode('view')
 
-tm_shape(wind_farm) +
+wind_farm_map <- tm_shape(wind_farm) +
   tm_basemap(leaflet::providers$Esri.WorldImagery) +
   tm_bubbles(fill = 'skyblue') +
   tm_scalebar(position = c('left', 'bottom')) +
   tm_title('Roscoe Wind Farm LLC: Nolan & Fisher County, TX')
+
+wind_farm_map
 ```
 
 ### AOI Data
 
+We can also obtain building data from OpenStreetMap. We downloaded from [Geofabrick](https://www.geofabrik.de/data/download.html) and prepared a GeoPackage containing only houses in the Houston metropolitan area.
+
+-   `gis_osm_buildings_a_free_1.gpkg`
+
+Want:
+
+-   a code that can go to [this main website](http://download.geofabrik.de/north-america/us.html), then select the state shape file of interest.
+
+-   the scape the zip file for the state of interest
+
+-   [download and select data for subsetting](https://cran.r-project.org/web/packages/osmextract/vignettes/osmextract.html)
+
+This chunk is psuedo code
+
+```{r}
+#--------------Load Library----------------------
+# This package is essentail to scape data from Open Street Maps
+library(osmextract)
+
+#--------------One line simplified Workflow------
+# specifics on data attributes to subset
+my_vectortranslate = c(
+  "-t_srs", "EPSG:4326",                                 # SQL-like query where we select only the following fields
+#  "-select", "osm_id, highway",             
+ # "-where", "highway IN ('footway', 'cycleway')"         # SQL-like query where we filter only the features where highway is equal to footway or cycleway
+)
+
+
+# Create a bounding box for our area of interest using wind farm of interest
+aoi_bbox <- st_bbox(extent(wind_farm)) %>% 
+  st_as_sfc(CRS = 4326)
+
+
+# Apply specifications and read everything in
+USA_lines = oe_get('United States of America', 
+                   vectortranslate_options = my_vectortranslate,
+                   quiet = TRUE,
+                   boundary = aoi_bbox)
+```
+
+Step-by-step data selection process (not psuedo code)
+
+For simplicity's sake as we're developing this workflow, I will initially use TX data. After refining the process, I will then move to trying to load the whole country.
+
+```{r}
+#--------------Load Library----------------------
+# This package is essentail to scape data from Open Street Maps
+library(osmextract)
+
+#------------Identifying OSM Data Set(s)---------
+# identify data set containing USA. displays name and size of data set 
+state_details <- oe_match('Texas')                       # Input the name of the state containing the wind farm of interest.
+
+# download data to specific file directory (file type will be pbf in this case)
+state_pbf <- oe_download(
+  file_url = state_details$url, 
+  file_size = state_details$file_size,
+  provider = "state",
+  download_directory =  "../data/osm_data/"             # path-to-a-directory
+)
+
+#--------------Inspect Data Downloaded------------
+# pbf typically contain layers
+st_layers(state_pbf, do_count = TRUE)
+
+
+
+#----------Converting PBF to GPKG-----------------
+# converting pbf format to gpkg format
+state_gpkg <- oe_vectortranslate(state_pbf, layer = 'lines')
+
+
+
+#----------Inspect gpkg Data----------------------
+# check data to make sure file contains what we want.
+st_layers(state_gpkg, do_count = TRUE)
+
+
+
+#----------View Specific Features: Lines-----------
+# describe the variables embedded in the layer called and display the bounds of those values.
+oe_get_keys(state_gpkg, layer = "lines", values = TRUE)
+
+#----------Tags of Interest Output in Console------
+# some tags that we're interested in that were output in the console are:
+# tag: lines               
+# tiger:county (69% NAs), tiger:name_base (83% NAs) [street names], tiger:name_type (87% NAs) [type of street name i.e. Rd, St.], service (80% NAs) [type of road access], acess (84% NAs) [private, customers, permit], tiger:cfcc (71% NAs) [I unit numbers, need to check metadata]
+
+
+
+
+#----------View Specific Features: Points----------
+# describe the variables embedded in the layer called and display the bounds of those values.
+oe_get_keys(state_gpkg, layer = "points", values = TRUE)
+
+#----------Tags of Interest Output in Console------
+# some tags that we're interested in that were output in the console are:
+# tag: points
+# addr:street (91% NAs) [combined name_base and name_type], addr:housenumber (92% NAs), addr:postcode (93% NAs), addr:city (97% NAs), amenity (95% NAs) [place of worship, restaurant, school] 
+
+
+
+
+
+#-----------Subsetting Tags of Interest-------------
+tags <- c("tiger:county", "tiger:name_base","tiger:name_type", "service", "acess", "tiger:cfcc", "addr:street", "addr:housenumber", "addr:postcode", "addr:city", "amenity")
+
+# We can use these keys to specify aspects of the df to subset.
+state_gpkg <- oe_vectortranslate(state_pbf, extra_tags = tags)
+
+
+
+#-----------Reading in gpkg-----------------------
+state <- oe_read(state_gpkg)
+```
+
+```{r}
+#--------------Load Library----------------------
+# This package is essentail to scape data from Open Street Maps
+#library(osmextract)
+selecting_state_data <- function(state_name) {
+
+#------------Identifying OSM Data Set(s)---------
+# identify data set containing USA. displays name and size of data set 
+state_details <- oe_match(state_name)                       # Input the name of the state containing the wind farm of interest.
+
+# download data to specific file directory (file type will be pbf in this case)
+state_pbf <- oe_download(
+  file_url = state_details$url, 
+  file_size = state_details$file_size,
+  provider = "state",
+  download_directory =  "../data/osm_data/"             # path-to-a-directory
+)
+
+
+
+#----------Converting PBF to GPKG-----------------
+# converting pbf format to gpkg format
+state_gpkg <- oe_vectortranslate(state_pbf, layer = 'lines')
+
+#----------Tags of Interest Output in Console------
+# some tags that we're interested in that were output in the console are:
+
+# tag: lines               
+# tiger:county (69% NAs), tiger:name_base (83% NAs) [street names], tiger:name_type (87% NAs) [type of street name i.e. Rd, St.], service (80% NAs) [type of road access], acess (84% NAs) [private, customers, permit], tiger:cfcc (71% NAs) [I unit numbers, need to check metadata]
+
+
+# tag: points
+# addr:street (91% NAs) [combined name_base and name_type], addr:housenumber (92% NAs), addr:postcode (93% NAs), addr:city (97% NAs), amenity (95% NAs) [place of worship, restaurant, school] 
+
+#-----------Subsetting Tags of Interest-------------
+tags <- c("tiger:county", "tiger:name_base","tiger:name_type", "service", "acess", "tiger:cfcc", "addr:street", "addr:housenumber", "addr:postcode", "addr:city", "amenity")
+
+# We can use these keys to specify aspects of the df to subset.
+state_gpkg <- oe_vectortranslate(state_pbf, extra_tags = tags)
+
+
+
+#-----------Reading in gpkg-----------------------
+state <- oe_read(state_gpkg)
+}
+
+selecting_state_data('Texas')
+```
+
+SQL that may potentially help with reading
+
+```{r}
+#Using `st_read` and SQL query to select only residential buildings to then re-project the CRS to EPSG:4326.
+# SQL Query to aid in data loading process
+building_query <- "SELECT*
+FROM gis_osm_buildings_a_free_1
+WHERE (type IS NULL AND name IS NULL)
+OR type in ('residential', 'apartments', 'house', 'static_caravan', 'detached')"
+
+# Loading in the building data with the query
+buildings <- st_read("data/gis_osm_buildings_a_free_1.gpkg",
+                     query = building_query,
+                     quiet = TRUE)
+```
+
 Below, we will read in some data corresponding to the state of interest. In this example, we are loading in a shapefile for Texas.
 
-#### Nolan County, TX
+#### Nolan & Fisher County, TX
 
 ```{r include=TRUE, eval=FALSE, warning=FALSE, error=FALSE}
+#------------Read in Data---------------
 # read in data corresponding to the state of interest. In this example, we are loading in a shapefile for Texas.
 state <- st_read("../data/wind_data/tl_2023_48_tabblock20/tl_2023_48_tabblock20.shp",
-                      quiet = TRUE)
+                      quiet = TRUE)                                                      # reads in raster data using the sf package st_read function. The quiet T/F input refers to information output after importing data.
 
-# reads in raster data using the sf package st_read function
-# the quiet T/F input refers to information output after importing data
-
+#------------CRS for sf object-----------
 # Setting the CRS for our state shapefile
 state <- st_transform(state, "EPSG:4326")
 ```
@@ -177,6 +359,16 @@ The extent of our wind plant of interest is roughly (100.67, 32.47). Therefore, 
 I want to create a function that can automatically determine a bounding box region according to the extent of the wind farm.
 
 ```{r}
+#----------Creating a Bounding Box------------------
+
+# using wind farm of interest, filter for better data? or simply df downloaded
+#milan_duomo = sf::st_sfc(sf::st_point(c(1514924, 5034552)), crs = 3003)
+#oe_match(milan_duomo)
+
+
+
+
+
 # bounding box of sweetwater tx, created using GeoJSON
 bbox <- st_polygon(
   list(
@@ -201,12 +393,15 @@ bbox <- bbox %>%
   st_set_crs(4326) %>%  
   st_make_valid() 
 
+#---------Check CRS Match---------------------------
 # Crop the tx shapefile to only sweetwater bbox bounds. Some crs wrangling & checking needed before we can crop & plot.
 st_crs(state) == st_crs(bbox)
 ```
 
 #### Quick Visualization of bbox created for our aoi, overlayed with the wind farm's location.
+
 ```{r}
+#---------------Cropping state df and combining df with wind_sf-----------
 # Crop shapefile of tx to our bounding box extent and join with 
 aoi <- st_crop(state, bbox) %>% 
   st_join(wind_sf, st_intersects) %>% 
@@ -214,10 +409,11 @@ aoi <- st_crop(state, bbox) %>%
   st_transform(4326) %>% 
   st_make_valid() 
 
+#---------------Visualizing Bounding Box around Wind Farm-----------------
 # visualization of our wind farm overlayed ontop of our aoi.
 tmap_mode('view')
 
-tm_shape(aoi) +
+aoi_map <- tm_shape(aoi) +
   tm_basemap(leaflet::providers$Esri.WorldImagery) +
   tm_polygons(alpha = 0.2) +
   tm_shape(wind_farm) +
@@ -226,6 +422,7 @@ tm_shape(aoi) +
   tm_scalebar(position = c('left', 'bottom')) +
   tm_title('AOI: Roscoe Wind Farm LLC: Nolan & Fisher County, TX')
 
+aoi_map
 ```
 
 ## Buffers
@@ -246,27 +443,30 @@ want:
 
 -   bonus: filter for specific groups of interest
 
-- detailed descriptions/annotations
+-   detailed descriptions/annotations
 
 Notes to improve map:
 
 Need to fix the quantile grouping
 
 ```{r}
+#---------Building a Buffer----------------------
 # create a 3 km buffer around the wind farm
 wind_farm_buffer <- st_buffer(wind_farm, dist = 3000) 
 
+
+#---------Visualize Buffer around Wind Farm in Bounding Box-----------
 # visualization of our 3km buffer around our wind farm of interest, overlayed ontop of our aoi.
 tmap_mode('view')
 
-tm_shape(aoi) +
+aoi_buffer_map <- tm_shape(aoi) +
   tm_basemap(leaflet::providers$Esri.WorldImagery) +
   tm_polygons('POP20',
               style = 'quantile',
               palette = 'Oranges',
               alpha = 0.5) +
 tm_shape(wind_farm_buffer) +
-  tm_polygons(alpha = 0.5) +
+  tm_polygons(alpha = 0.2) +
 tm_shape(aoi) +
   tm_polygons(alpha = 0.3) +
   tm_shape(wind_farm) +
@@ -274,6 +474,8 @@ tm_shape(aoi) +
           title = 'Roscoe Wind Farm LLC') +
   tm_scalebar(position = c('left', 'bottom')) +
   tm_title('Buffer AOI Within 3 km of Roscoe Wind Farm LLC: Nolan & Fisher County, TX') 
+
+aoi_buffer_map
 ```
 
 ### Creating & Isolating a 3 km Buffer Region in our AOI
@@ -290,9 +492,9 @@ Next, we will find the geo-points bordering and within our buffer aoi.
 #---------Surveying points on buffer border-------------
 # combine the locations from the buffer and our aoi that touch the border of the buffer, but these points do not overlap. 
 # for some reason, I haven't been able to get st_filter join = st_intersects to work, so we're using st_intersection for now
-areas_bordering_buffer <- st_intersection(aoi, wind_farm_buffer) #%>% 
- # st_union() %>% 
-#  st_sf()
+areas_bordering_buffer <- st_intersection(aoi, wind_farm_buffer)# %>% 
+  #st_union() %>% 
+ # st_sf()
 # include the variables from wind_farm_buffer that correspond to the observations in areas_within_buffer
 areas_bordering_buffer <- st_join(areas_bordering_buffer, wind_farm_buffer, st_intersects) 
 
@@ -300,7 +502,7 @@ areas_bordering_buffer <- st_join(areas_bordering_buffer, wind_farm_buffer, st_i
 #---------Surveying points within buffer----------------
 # filter the points in our aoi that fall within the wind_farm_buffer. The only information contained in this output are variables from the aoi data set.
 areas_within_buffer <- st_filter(aoi, wind_farm_buffer, .predicate = st_within) #%>% 
-#  st_union() %>% 
+ # st_union() %>% 
 #  st_sf()
 
 # include the variables from wind_farm_buffer that correspond to the observations in areas_within_buffer
@@ -310,53 +512,15 @@ areas_within_buffer <-st_join(areas_within_buffer, wind_farm_buffer, st_intersec
 #### Removing Overlapping Points
 
 ```{r warning=FALSE}
-#---------------
-areas_bordering_buffer <- aggregate(areas_bordering_buffer, by = areas_bordering_buffer$geometry, FUN = mean) %>% 
-  group_by_all(sf_column_name = geometry) %>% 
-  distinct()  
+#---------------Group Similar Geo-points----------
+#areas_bordering_buffer <- aggregate(areas_bordering_buffer, by = areas_bordering_buffer$geometry, FUN = mean) %>% 
+  #group_by_all(sf_column_name = geometry) %>% 
+ # distinct()   
 
-#--------------Nearest Neighbor------------
+
+#--------------Resample Using Nearest Neighbor------------
 # want to find a function to resample this sf object and use nearest neighbor appraoch to combine similar points, probably need to rasterize first then convert back to sf object after.
 #areas_bordering_buffer_2 <- st_resample(areas_bordering_buffer, areas_within_buffer, method = "near")
-```
-
-###### Voronoi tesselation
-"Thiessen polygon maps, which are also called Voronoi diagrams, are used to define and to delineate proximal regions around individual data points by using polygonal boundaries."[Source]['https://www.sciencedirect.com/topics/earth-and-planetary-sciences/voronoi-diagram#:~:text=Thiessen%20polygon%20maps%2C%20which%20are,points%20by%20using%20polygonal%20boundaries.']
-
-```{r}
-st_no_overlap <- function(polygons) {
-
-  centroids <- st_centroid(polygons)
-
-  # Voronoi tesselation
-  voronoi <-
-    centroids %>%
-    st_geometry() %>%
-    st_union() %>%
-    st_voronoi() %>%
-    st_collection_extract() %>% 
-    st_overlaps(st_set_precision(st_no_overlap(st_sf(geometry = areas_bordering_buffer))))
-
-  # Put them back in their original order
-  voronoi <- voronoi[unlist(st_intersects(centroids, voronoi))]
-
-  # Keep the attributes
-  result <- centroids
-
-  # Intersect voronoi zones with polygons
-  st_geometry(result) <-
-    mapply(function(x, y) st_intersection(x, y),
-           st_geometry(polygons),
-           voronoi,
-           SIMPLIFY = FALSE) %>%
-    st_sf(crs = st_crs(polygons, 4326))
-
-  result
-}
-
-
-# applying this function, could not properly triangulate 
-areas_bordering_buffer_2 <- st_no_overlap(areas_bordering_buffer$geometry)
 ```
 
 ### Inspecting our Surveying AOI
@@ -369,7 +533,7 @@ In this case, our outputs contain `L1` that has a single output of 1. This indic
 
 `L2` refers to the simple feature, for the polygon on multipolygon `L1` describes.
 
-`L3` 
+`L3`
 
 #### Creating a sf object containing the coordinates of surveying points within our AOI.
 
@@ -411,10 +575,10 @@ Using the interactive nature of this plot, we can see that a number of points ar
 # visualization of our 3km buffer around our wind farm of interest, overlayed ontop of our aoi.
 tmap_mode('view')
 
-tm_shape(surveying_points) +
+surveying_points_map <- tm_shape(surveying_points) +
   tm_basemap(leaflet::providers$Esri.WorldImagery) +
   tm_bubbles(col = '#C95B0C',
-             alpha = 0.5) +
+             alpha = 0.3) +
   tm_shape(aoi) +
   tm_polygons(alpha = 0.2) +
   tm_shape(wind_farm) +
@@ -422,8 +586,8 @@ tm_shape(surveying_points) +
           title = 'Roscoe Wind Farm LLC') +
   tm_scalebar(position = c('left', 'bottom')) +
   tm_title('Surveying Geo-points Within 3 km of Roscoe Wind Farm LLC: Nolan & Fisher County, TX') 
+surveying_points_map
 ```
-
 
 want:
 
