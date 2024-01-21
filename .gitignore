@@ -2,6 +2,7 @@
 .Rhistory
 .Rapp.history
 .rosm.cache/
+rosm.cache/
 
 # Session Data files
 .RData
